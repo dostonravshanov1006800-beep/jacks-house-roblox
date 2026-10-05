@@ -1,11 +1,11 @@
 -- ================================================================
 -- MonsterAI — монстр преследует ближайшего живого игрока.
--- Все части модели монстра должны быть заякорены (Anchored = on).
--- Управление через PivotTo — никакой физики, чистое движение.
+-- Если модели Monster нет — код собирает запасного монстра сам:
+-- тёмная фигура с горящими красными глазами и красным свечением.
+-- Все части должны быть заякорены (Anchored = on).
 -- ================================================================
 
 local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
 
 local GameConfig = require(script.Parent.GameConfig)
 
@@ -18,9 +18,55 @@ local aggroPlayer = nil
 local aggroUntil = 0
 local hooks = nil -- {getTargets, onKill, isBlackout}
 
+-- ---------- Запасной монстр (если нет модели из Toolbox) ----------
+local function buildFallbackMonster()
+	local model = Instance.new("Model")
+	model.Name = "FallbackMonsterTemplate"
+
+	local function p(name, size, pos, color, material)
+		local part = Instance.new("Part")
+		part.Name = name
+		part.Size = size
+		part.Position = pos
+		part.Color = color
+		part.Material = material or Enum.Material.Slate
+		part.Anchored = true
+		part.TopSurface = Enum.SurfaceType.Smooth
+		part.BottomSurface = Enum.SurfaceType.Smooth
+		part.Parent = model
+		return part
+	end
+
+	local black = Color3.fromRGB(12, 12, 16)
+	local torso = p("Torso", Vector3.new(3, 7, 1.8), Vector3.new(0, 3.5, 0), black)
+	p("Head", Vector3.new(2.4, 2.4, 2.4), Vector3.new(0, 8.4, 0), black)
+	p("LeftArm", Vector3.new(0.9, 6.5, 0.9), Vector3.new(-2.1, 4, 0), black)
+	p("RightArm", Vector3.new(0.9, 6.5, 0.9), Vector3.new(2.1, 4, 0), black)
+	p("LeftLeg", Vector3.new(1.1, 3.2, 1.1), Vector3.new(-0.8, 1.6, 0), black)
+	p("RightLeg", Vector3.new(1.1, 3.2, 1.1), Vector3.new(0.8, 1.6, 0), black)
+
+	-- Горящие красные глаза (вперёд = -Z)
+	local neonRed = Color3.fromRGB(255, 30, 30)
+	local eyeL = p("EyeL", Vector3.new(0.5, 0.3, 0.15), Vector3.new(-0.55, 8.5, -1.25), neonRed, Enum.Material.Neon)
+	local eyeR = p("EyeR", Vector3.new(0.5, 0.3, 0.15), Vector3.new(0.55, 8.5, -1.25), neonRed, Enum.Material.Neon)
+
+	local glow = Instance.new("PointLight")
+	glow.Color = Color3.fromRGB(255, 40, 40)
+	glow.Range = 14
+	glow.Brightness = 0.9
+	glow.Parent = torso
+
+	model.PrimaryPart = torso
+	return model
+end
+
 function MonsterAI.init(h, template)
 	hooks = h
 	monsterTemplate = template
+	if not monsterTemplate then
+		monsterTemplate = buildFallbackMonster()
+		monsterTemplate.Parent = nil
+	end
 end
 
 -- Предатель "постучал" — монстр переключается на жертву

@@ -1,11 +1,13 @@
 -- ================================================================
 -- RoundManager — сердце игры: лобби -> отсчёт -> раунд -> итоги.
 -- Двери, прогресс, предатель, отключение света, награды.
+-- Двери открываются с анимацией (уезжают в пол).
 -- ================================================================
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Lighting = game:GetService("Lighting")
+local TweenService = game:GetService("TweenService")
 
 local GameConfig = require(script.Parent.GameConfig)
 local CandyManager = require(script.Parent.CandyManager)
@@ -31,8 +33,8 @@ local round = {
 local knockCd = {}
 
 -- ---------- Освещение (штатное / блэкаут) ----------
-local DARK = { Brightness = 0, Ambient = Color3.fromRGB(5, 5, 12), FogEnd = 60 }
-local NORMAL = { Brightness = 1.5, Ambient = Color3.fromRGB(60, 60, 75), FogEnd = 100000 }
+local DARK = { Brightness = 0, Ambient = Color3.fromRGB(5, 5, 12), FogEnd = 55 }
+local NORMAL = { Brightness = 1.5, Ambient = Color3.fromRGB(60, 60, 75), FogEnd = 140 }
 
 local function applyLighting(dark)
 	for k, v in pairs(dark and DARK or NORMAL) do
@@ -72,6 +74,7 @@ local function sendState(player)
 		countdown = round.countdown,
 		result = round.result,
 		knockCd = GameConfig.KNOCK_COOLDOWN,
+		monsterProximity = GameConfig.MONSTER_PROXIMITY,
 	}
 	GameStateRemote:FireClient(player, payload)
 end
@@ -127,6 +130,23 @@ local function winPlayer(player)
 	sendState(player)
 end
 
+-- ---------- Анимация открытия двери ----------
+local function openDoor(door)
+	door.CanCollide = false
+	local tween = TweenService:Create(
+		door,
+		TweenInfo.new(0.9, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+		{
+			CFrame = door.CFrame - Vector3.new(0, door.Size.Y + 1, 0),
+			Transparency = 0.5,
+		}
+	)
+	tween:Play()
+	tween.Completed:Connect(function()
+		door.Transparency = 1
+	end)
+end
+
 -- ---------- Двери и пады ----------
 local function setupTouch(rooms)
 	for i, room in ipairs(rooms) do
@@ -140,12 +160,12 @@ local function setupTouch(rooms)
 
 				if i == GameConfig.TOTAL_ROOMS then
 					-- Финальная дверь = ВЫХОД
+					openDoor(room.door)
 					winPlayer(player)
 					return
 				end
 
-				room.door.CanCollide = false
-				room.door.Transparency = 1
+				openDoor(room.door)
 				round.doorsOpen = i
 				broadcast()
 			end)
